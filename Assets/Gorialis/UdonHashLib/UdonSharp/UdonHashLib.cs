@@ -50,16 +50,19 @@ public class UdonHashLib : UdonSharpBehaviour
             if (character < 0x80)
             {
                 buffer[writeIndex++] = (byte)character;
-            } else if (character < 0x800)
+            }
+            else if (character < 0x800)
             {
                 buffer[writeIndex++] = (byte)(0b11000000 | ((character >> 6) & 0b11111));
                 buffer[writeIndex++] = (byte)(0b10000000 | (character & 0b111111));
-            } else if (character < 0x10000)
+            }
+            else if (character < 0x10000)
             {
                 buffer[writeIndex++] = (byte)(0b11100000 | ((character >> 12) & 0b1111));
                 buffer[writeIndex++] = (byte)(0b10000000 | ((character >> 6) & 0b111111));
                 buffer[writeIndex++] = (byte)(0b10000000 | (character & 0b111111));
-            } else
+            }
+            else
             {
                 buffer[writeIndex++] = (byte)(0b11110000 | ((character >> 18) & 0b111));
                 buffer[writeIndex++] = (byte)(0b10000000 | ((character >> 12) & 0b111111));
@@ -75,6 +78,15 @@ public class UdonHashLib : UdonSharpBehaviour
         for (int i = 0; i < writeIndex; i++)
             output[i] = buffer[i];
 
+        return output;
+    }
+    private string BytesToString(byte[] bytes)
+    {
+        string output = "";
+        foreach (var item in bytes)
+        {
+            output += item.ToString("x2");
+        }
         return output;
     }
 
@@ -172,15 +184,18 @@ public class UdonHashLib : UdonSharpBehaviour
                 {
                     f = ((work[1] & work[2]) | ((size_mask ^ work[1]) & work[3])) & size_mask;
                     g = (ulong)copy_index;
-                } else if (copy_index < 32)
+                }
+                else if (copy_index < 32)
                 {
                     f = ((work[3] & work[1]) | ((size_mask ^ work[3]) & work[2])) & size_mask;
                     g = (ulong)(((5 * copy_index) + 1) % 16);
-                } else if (copy_index < 48)
+                }
+                else if (copy_index < 48)
                 {
                     f = work[1] ^ work[2] ^ work[3];
                     g = (ulong)(((3 * copy_index) + 5) % 16);
-                } else
+                }
+                else
                 {
                     f = (work[2] ^ (work[1] | (size_mask ^ work[3]))) & size_mask;
                     g = (ulong)(7 * copy_index % 16);
@@ -230,7 +245,7 @@ public class UdonHashLib : UdonSharpBehaviour
         0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0,
     };
 
-    private string SHA1_Core(byte[] payload_bytes, ulong[] init, ulong size_mask, int word_size, int chunk_modulo, int appended_length, int left_rotations, int round_count, string output_format, int output_segments)
+    private byte[] SHA1_Core(byte[] payload_bytes, ulong[] init, ulong size_mask, int word_size, int chunk_modulo, int appended_length, int left_rotations, int round_count, int output_segments)
     {
         int word_bytes = word_size / 8;
 
@@ -306,15 +321,18 @@ public class UdonHashLib : UdonSharpBehaviour
                 {
                     f = ((work[1] & work[2]) | ((size_mask ^ work[1]) & work[3])) & size_mask;
                     k = 0x5A827999;
-                } else if (copy_index < 40)
+                }
+                else if (copy_index < 40)
                 {
                     f = work[1] ^ work[2] ^ work[3];
                     k = 0x6ED9EBA1;
-                } else if (copy_index < 60)
+                }
+                else if (copy_index < 60)
                 {
                     f = (work[1] & work[2]) ^ (work[1] & work[3]) ^ (work[2] & work[3]);
                     k = 0x8F1BBCDC;
-                } else
+                }
+                else
                 {
                     f = work[1] ^ work[2] ^ work[3];
                     k = 0xCA62C1D6;
@@ -333,13 +351,14 @@ public class UdonHashLib : UdonSharpBehaviour
         }
 
         // Finalization
-        string output = "";
-
-        for (int character_index = 0; character_index < output_segments; character_index++)
+        byte[] output = new byte[output_segments * word_bytes];
+        for (int i = 0; i < output_segments; i++)
         {
-            output += string.Format(output_format, working_variables[character_index]);
+            for (int j = 0; j < word_bytes; j++)
+            {
+                output[(i * word_bytes) + j] = Convert.ToByte((working_variables[i] >> (word_bytes - j - 1) * 8) & 0xFFul);
+            }
         }
-
         return output;
     }
 
@@ -362,12 +381,54 @@ public class UdonHashLib : UdonSharpBehaviour
     /* SHA1 */
     public string SHA1_Bytes(byte[] data)
     {
-        return SHA1_Core(data, sha1_init, 0xFFFFFFFFul, 32, 64, 8, 1, 80, "{0:x8}", 5);
+        return BytesToString(SHA1_Core(data, sha1_init, 0xFFFFFFFFul, 32, 64, 8, 1, 80, 5));
     }
 
     public string SHA1_UTF8(string text)
     {
-        return SHA1_Core(ToUTF8(text.ToCharArray()), sha1_init, 0xFFFFFFFFul, 32, 64, 8, 1, 80, "{0:x8}", 5);
+        return BytesToString(SHA1_Core(ToUTF8(text.ToCharArray()), sha1_init, 0xFFFFFFFFul, 32, 64, 8, 1, 80, 5));
+    }
+
+    public string HMAC_SHA1_Bytes(byte[] data, byte[] key)
+    {
+        if (key.Length > 64)
+        {
+            key = SHA1_Core(key, sha1_init, 0xFFFFFFFFul, 32, 64, 8, 1, 80, 5);
+        }
+
+        byte[] ipad = new byte[64];
+        byte[] opad = new byte[64];
+
+        for (int i = 0; i < 64; i++)
+        {
+            ipad[i] = 0x36;
+            opad[i] = 0x5c;
+        }
+
+        for (int i = 0; i < key.Length; i++)
+        {
+            ipad[i] ^= key[i];
+            opad[i] ^= key[i];
+        }
+
+        byte[] inner = new byte[ipad.Length + data.Length];
+
+        ipad.CopyTo(inner, 0);
+        data.CopyTo(inner, ipad.Length);
+
+        byte[] innerHash = SHA1_Core(inner, sha1_init, 0xFFFFFFFFul, 32, 64, 8, 1, 80, 5);
+
+        byte[] outer = new byte[opad.Length + innerHash.Length];
+
+        opad.CopyTo(outer, 0);
+        innerHash.CopyTo(outer, opad.Length);
+
+        return BytesToString(SHA1_Core(outer, sha1_init, 0xFFFFFFFFul, 32, 64, 8, 1, 80, 5));
+    }
+
+    public string HMAC_SHA1_UTF8(string text, string key)
+    {
+        return HMAC_SHA1_Bytes(ToUTF8(text.ToCharArray()), ToUTF8(key.ToCharArray()));
     }
 
     /*  SHA2  */
@@ -444,7 +505,7 @@ public class UdonHashLib : UdonSharpBehaviour
         14, 18, 41,  // S1
     };
 
-    private string SHA2_Core(byte[] payload_bytes, ulong[] init, ulong[] constants, int[] sums, int[] sigmas, ulong size_mask, int word_size, int chunk_modulo, int appended_length, int round_count, string output_format, int output_segments)
+    private byte[] SHA2_Core(byte[] payload_bytes, ulong[] init, ulong[] constants, int[] sums, int[] sigmas, ulong size_mask, int word_size, int chunk_modulo, int appended_length, int round_count, int output_segments)
     {
         int word_bytes = word_size / 8;
 
@@ -457,7 +518,8 @@ public class UdonHashLib : UdonSharpBehaviour
 
         // Each 64-byte/512-bit chunk
         // 64 bits/8 bytes are required at the end for the bit size
-        for (int chunk_index = 0; chunk_index < payload_bytes.Length + appended_length + 1; chunk_index += chunk_modulo) {
+        for (int chunk_index = 0; chunk_index < payload_bytes.Length + appended_length + 1; chunk_index += chunk_modulo)
+        {
             int chunk_size = Mathf.Min(chunk_modulo, payload_bytes.Length - chunk_index);
             int schedule_index = 0;
 
@@ -471,7 +533,8 @@ public class UdonHashLib : UdonSharpBehaviour
             for (; schedule_index < chunk_modulo; ++schedule_index)
                 input[schedule_index] = 0x00;
             // If the chunk is less than 56 bytes, this will be the final chunk containing the data size in bits
-            if (chunk_size < chunk_modulo - appended_length) {
+            if (chunk_size < chunk_modulo - appended_length)
+            {
                 ulong bit_size = (ulong)payload_bytes.Length * 8ul;
                 input[chunk_modulo - 1] = Convert.ToByte((bit_size >> 0x00) & 0xFFul);
                 input[chunk_modulo - 2] = Convert.ToByte((bit_size >> 0x08) & 0xFFul);
@@ -496,7 +559,8 @@ public class UdonHashLib : UdonSharpBehaviour
                 message_schedule[copy_index] = message_schedule[copy_index] & size_mask;
             }
             // Extend
-            for(; copy_index < round_count; copy_index++) {
+            for (; copy_index < round_count; copy_index++)
+            {
                 ulong s0_read = message_schedule[copy_index - 15];
                 ulong s1_read = message_schedule[copy_index - 2];
 
@@ -539,57 +603,227 @@ public class UdonHashLib : UdonSharpBehaviour
         }
 
         // Finalization
-        string output = "";
-
-        for (int character_index = 0; character_index < output_segments; character_index++) {
-            output += string.Format(output_format, working_variables[character_index]);
+        byte[] output = new byte[output_segments * word_bytes];
+        for (int i = 0; i < output_segments; i++)
+        {
+            for (int j = 0; j < word_bytes; j++)
+            {
+                output[(i * word_bytes) + j] = Convert.ToByte((working_variables[i] >> (word_bytes - j - 1) * 8) & 0xFFul);
+            }
         }
-
         return output;
     }
 
     /* SHA224 */
     public string SHA224_Bytes(byte[] data)
     {
-        return SHA2_Core(data, sha224_init, sha256_constants, sha256_sums, sha256_sigmas, 0xFFFFFFFFul, 32, 64, 8, 64, "{0:x8}", 7);
+        return BytesToString(SHA2_Core(data, sha224_init, sha256_constants, sha256_sums, sha256_sigmas, 0xFFFFFFFFul, 32, 64, 8, 64, 7));
     }
 
     public string SHA224_UTF8(string text)
     {
-        return SHA2_Core(ToUTF8(text.ToCharArray()), sha224_init, sha256_constants, sha256_sums, sha256_sigmas, 0xFFFFFFFFul, 32, 64, 8, 64, "{0:x8}", 7);
+        return BytesToString(SHA2_Core(ToUTF8(text.ToCharArray()), sha224_init, sha256_constants, sha256_sums, sha256_sigmas, 0xFFFFFFFFul, 32, 64, 8, 64, 7));
+    }
+
+    public string HMAC_SHA224_Bytes(byte[] data, byte[] key)
+    {
+        if (key.Length > 64)
+        {
+            key = SHA2_Core(key, sha224_init, sha256_constants, sha256_sums, sha256_sigmas, 0xFFFFFFFFul, 32, 64, 8, 64, 7);
+        }
+
+        byte[] ipad = new byte[64];
+        byte[] opad = new byte[64];
+
+        for (int i = 0; i < 64; i++)
+        {
+            ipad[i] = 0x36;
+            opad[i] = 0x5c;
+        }
+
+        for (int i = 0; i < key.Length; i++)
+        {
+            ipad[i] ^= key[i];
+            opad[i] ^= key[i];
+        }
+
+        byte[] inner = new byte[ipad.Length + data.Length];
+
+        ipad.CopyTo(inner, 0);
+        data.CopyTo(inner, ipad.Length);
+
+        byte[] innerHash = SHA2_Core(inner, sha224_init, sha256_constants, sha256_sums, sha256_sigmas, 0xFFFFFFFFul, 32, 64, 8, 64, 7);
+
+        byte[] outer = new byte[opad.Length + innerHash.Length];
+
+        opad.CopyTo(outer, 0);
+        innerHash.CopyTo(outer, opad.Length);
+
+        return BytesToString(SHA2_Core(outer, sha224_init, sha256_constants, sha256_sums, sha256_sigmas, 0xFFFFFFFFul, 32, 64, 8, 64, 7));
+    }
+
+    public string HMAC_SHA224_UTF8(string text, string key)
+    {
+        return HMAC_SHA224_Bytes(ToUTF8(text.ToCharArray()), ToUTF8(key.ToCharArray()));
     }
 
     /* SHA256 */
     public string SHA256_Bytes(byte[] data)
     {
-        return SHA2_Core(data, sha256_init, sha256_constants, sha256_sums, sha256_sigmas, 0xFFFFFFFFul, 32, 64, 8, 64, "{0:x8}", 8);
+        return BytesToString(SHA2_Core(data, sha256_init, sha256_constants, sha256_sums, sha256_sigmas, 0xFFFFFFFFul, 32, 64, 8, 64, 8));
     }
 
     public string SHA256_UTF8(string text)
     {
-        return SHA2_Core(ToUTF8(text.ToCharArray()), sha256_init, sha256_constants, sha256_sums, sha256_sigmas, 0xFFFFFFFFul, 32, 64, 8, 64, "{0:x8}", 8);
+        return BytesToString(SHA2_Core(ToUTF8(text.ToCharArray()), sha256_init, sha256_constants, sha256_sums, sha256_sigmas, 0xFFFFFFFFul, 32, 64, 8, 64, 8));
+    }
+
+    public string HMAC_SHA256_Bytes(byte[] data, byte[] key)
+    {
+        if (key.Length > 64)
+        {
+            key = SHA2_Core(key, sha256_init, sha256_constants, sha256_sums, sha256_sigmas, 0xFFFFFFFFul, 32, 64, 8, 64, 8);
+        }
+
+        byte[] ipad = new byte[64];
+        byte[] opad = new byte[64];
+
+        for (int i = 0; i < 64; i++)
+        {
+            ipad[i] = 0x36;
+            opad[i] = 0x5c;
+        }
+
+        for (int i = 0; i < key.Length; i++)
+        {
+            ipad[i] ^= key[i];
+            opad[i] ^= key[i];
+        }
+
+        byte[] inner = new byte[ipad.Length + data.Length];
+
+        ipad.CopyTo(inner, 0);
+        data.CopyTo(inner, ipad.Length);
+
+        byte[] innerHash = SHA2_Core(inner, sha256_init, sha256_constants, sha256_sums, sha256_sigmas, 0xFFFFFFFFul, 32, 64, 8, 64, 8);
+
+        byte[] outer = new byte[opad.Length + innerHash.Length];
+
+        opad.CopyTo(outer, 0);
+        innerHash.CopyTo(outer, opad.Length);
+
+        return BytesToString(SHA2_Core(outer, sha256_init, sha256_constants, sha256_sums, sha256_sigmas, 0xFFFFFFFFul, 32, 64, 8, 64, 8));
+    }
+
+    public string HMAC_SHA256_UTF8(string text, string key)
+    {
+        return HMAC_SHA256_Bytes(ToUTF8(text.ToCharArray()), ToUTF8(key.ToCharArray()));
     }
 
     /* SHA384 */
     public string SHA384_Bytes(byte[] data)
     {
-        return SHA2_Core(data, sha384_init, sha512_constants, sha512_sums, sha512_sigmas, 0xFFFFFFFFFFFFFFFFul, 64, 128, 16, 80, "{0:x16}", 6);
+        return BytesToString(SHA2_Core(data, sha384_init, sha512_constants, sha512_sums, sha512_sigmas, 0xFFFFFFFFFFFFFFFFul, 64, 128, 16, 80, 6));
     }
 
     public string SHA384_UTF8(string text)
     {
-        return SHA2_Core(ToUTF8(text.ToCharArray()), sha384_init, sha512_constants, sha512_sums, sha512_sigmas, 0xFFFFFFFFFFFFFFFFul, 64, 128, 16, 80, "{0:x16}", 6);
+        return BytesToString(SHA2_Core(ToUTF8(text.ToCharArray()), sha384_init, sha512_constants, sha512_sums, sha512_sigmas, 0xFFFFFFFFFFFFFFFFul, 64, 128, 16, 80, 6));
+    }
+
+    public string HMAC_SHA384_Bytes(byte[] data, byte[] key)
+    {
+        if (key.Length > 128)
+        {
+            key = SHA2_Core(key, sha384_init, sha512_constants, sha512_sums, sha512_sigmas, 0xFFFFFFFFFFFFFFFFul, 64, 128, 16, 80, 6);
+        }
+
+        byte[] ipad = new byte[128];
+        byte[] opad = new byte[128];
+
+        for (int i = 0; i < 128; i++)
+        {
+            ipad[i] = 0x36;
+            opad[i] = 0x5c;
+        }
+
+        for (int i = 0; i < key.Length; i++)
+        {
+            ipad[i] ^= key[i];
+            opad[i] ^= key[i];
+        }
+
+        byte[] inner = new byte[ipad.Length + data.Length];
+
+        ipad.CopyTo(inner, 0);
+        data.CopyTo(inner, ipad.Length);
+
+        byte[] innerHash = SHA2_Core(inner, sha384_init, sha512_constants, sha512_sums, sha512_sigmas, 0xFFFFFFFFFFFFFFFFul, 64, 128, 16, 80, 6);
+
+        byte[] outer = new byte[opad.Length + innerHash.Length];
+
+        opad.CopyTo(outer, 0);
+        innerHash.CopyTo(outer, opad.Length);
+
+        return BytesToString(SHA2_Core(outer, sha384_init, sha512_constants, sha512_sums, sha512_sigmas, 0xFFFFFFFFFFFFFFFFul, 64, 128, 16, 80, 6));
+    }
+
+    public string HMAC_SHA384_UTF8(string text, string key)
+    {
+        return HMAC_SHA384_Bytes(ToUTF8(text.ToCharArray()), ToUTF8(key.ToCharArray()));
     }
 
     /* SHA512 */
     public string SHA512_Bytes(byte[] data)
     {
-        return SHA2_Core(data, sha512_init, sha512_constants, sha512_sums, sha512_sigmas, 0xFFFFFFFFFFFFFFFFul, 64, 128, 16, 80, "{0:x16}", 8);
+        return BytesToString(SHA2_Core(data, sha512_init, sha512_constants, sha512_sums, sha512_sigmas, 0xFFFFFFFFFFFFFFFFul, 64, 128, 16, 80, 8));
     }
 
     public string SHA512_UTF8(string text)
     {
-        return SHA2_Core(ToUTF8(text.ToCharArray()), sha512_init, sha512_constants, sha512_sums, sha512_sigmas, 0xFFFFFFFFFFFFFFFFul, 64, 128, 16, 80, "{0:x16}", 8);
+        return BytesToString(SHA2_Core(ToUTF8(text.ToCharArray()), sha512_init, sha512_constants, sha512_sums, sha512_sigmas, 0xFFFFFFFFFFFFFFFFul, 64, 128, 16, 80, 8));
+    }
+
+    public string HMAC_SHA512_Bytes(byte[] data, byte[] key)
+    {
+        if (key.Length > 128)
+        {
+            key = SHA2_Core(key, sha512_init, sha512_constants, sha512_sums, sha512_sigmas, 0xFFFFFFFFFFFFFFFFul, 64, 128, 16, 80, 8);
+        }
+
+        byte[] ipad = new byte[128];
+        byte[] opad = new byte[128];
+
+        for (int i = 0; i < 128; i++)
+        {
+            ipad[i] = 0x36;
+            opad[i] = 0x5c;
+        }
+
+        for (int i = 0; i < key.Length; i++)
+        {
+            ipad[i] ^= key[i];
+            opad[i] ^= key[i];
+        }
+
+        byte[] inner = new byte[ipad.Length + data.Length];
+
+        ipad.CopyTo(inner, 0);
+        data.CopyTo(inner, ipad.Length);
+
+        byte[] innerHash = SHA2_Core(inner, sha512_init, sha512_constants, sha512_sums, sha512_sigmas, 0xFFFFFFFFFFFFFFFFul, 64, 128, 16, 80, 8);
+
+        byte[] outer = new byte[opad.Length + innerHash.Length];
+
+        opad.CopyTo(outer, 0);
+        innerHash.CopyTo(outer, opad.Length);
+
+        return BytesToString(SHA2_Core(outer, sha512_init, sha512_constants, sha512_sums, sha512_sigmas, 0xFFFFFFFFFFFFFFFFul, 64, 128, 16, 80, 8));
+    }
+
+    public string HMAC_SHA512_UTF8(string text, string key)
+    {
+        return HMAC_SHA512_Bytes(ToUTF8(text.ToCharArray()), ToUTF8(key.ToCharArray()));
     }
 }
 
